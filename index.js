@@ -4,8 +4,10 @@ const cors = require("cors")
 const path = require('path');  //import the module path
 const { attachmentUpload, deleteUploadedFile } = require('./fileUpload');
 const { FileUploadSessionClass } = require('./db/model/FileUploadSessionClass');
+const { FilePartController } = require('./controllers/FilePartController');
 
 const app = express();
+const multer = require("multer");
 
 // app.set('views', path.join(__dirname, 'views'));
 // app.set('view engine', 'html');
@@ -56,15 +58,31 @@ app.post("/upload", attachmentUpload, (req, res) => {
 })
 
 
-app.get('/upload/create_session', async (req, res) => {
+app.post('/upload/create_session', multer().none(), async (req, res) => {
   try {
-    //accept file & generate a sessionId to return
-    const {_id , unique_file_name} = await new FileUploadSessionClass().create();
+    const {
+      fileName,
+      fileSize
+    } = req.body;
 
-    res.send({
-      success: true,
-      fileInfo: { sessionId : _id , uniqueFileName : unique_file_name } 
-    })
+    console.log(req.body)
+
+    if (fileName != null && fileSize != null) {
+      //accept file & generate a sessionId to return
+      const { _id, unique_file_name } = await new FileUploadSessionClass(fileName, Number(fileSize)).create();
+
+      if (_id != null && unique_file_name != null)
+        res.send({
+          success: true,
+          fileInfo: { sessionId: _id, uniqueFileName: unique_file_name }
+        })
+
+      else
+        res.send({ success: false, message: ' Failed to Create Session Id', req: req });
+    }
+
+    else
+      res.send({ success: false, message: ' Failed to Create Session Id', req: req });
   }
   catch (e) {
     console.log(' Failed to Create Session Id', e);
@@ -73,34 +91,52 @@ app.get('/upload/create_session', async (req, res) => {
 })
 
 
-app.get('/upload/file_parts', async (req, res) => {
+app.post('/upload/file_parts',  async (req, res) => {
   try {
     //extract file chunk & generate a sessionId to return
-    // const { 
-    //   sessionId 
+    const {
+      sessionId,
+      partNumber,
+      filePart,
+      isLast
+    } = req.body;
+    const file = req.file;
 
-    // } = req.body ;
-    // const file = req.file ;
+    console.log('File Parts Req Body', req.body);
+    console.log('Req file', req.file);
 
-
-    const sessionId = '64e95ea6d5f94db498b5d0b4'
-
-    //get validate sessionId & find file
-    const fileInfo = await new FileUploadSessionClass().findSessionFileInfo(sessionId);
-
-    // write file chunk to localStorage
-
-    if (!fileInfo)
-      res.send({
+    // const sessionId = '64e95ea6d5f94db498b5d0b4'
+    if (!sessionId) {
+      return res.send({
         success: false,
         message: 'Invalid session Id'
       })
 
-    else
-      res.send({
-        success: true,
-        fileInfo: fileInfo
-      })
+    }
+
+    else {
+      // //get validate sessionId & find file
+      const fileInfo = await new FileUploadSessionClass().findSessionFileInfo(sessionId);
+
+      // // write file chunk to localStorage
+      // const f = new FilePartController() ;
+
+      // f.writeFileToStream() ;
+
+
+      if (!fileInfo)
+        res.send({
+          success: false,
+          message: 'Invalid session Id'
+        })
+
+      else
+        res.send({
+          success: true,
+          fileInfo: fileInfo
+        })
+    }
+
   }
   catch (e) {
     console.log(' Failed to find Session info', e);

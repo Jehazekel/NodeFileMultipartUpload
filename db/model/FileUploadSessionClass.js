@@ -1,6 +1,8 @@
 
 
 const uuidv4 = require('uuid').v4;
+const path = require('path')
+
 // Model 
 const FileSessionModel = require('../schemas/FileUploadSession');
 const { mongoose } = require('../script');
@@ -12,21 +14,21 @@ class FileUploadSessionClass {
   fileName = ''
   fileSize = 0
 
-  constructor() {
+  constructor(fileName, fileSize) {
     // super(FileSessionModel)
     // this.model = mongoose.model<Model<Document>>(this.constructor.name, FileSessionModel);
 
     // Use path to get file extension
-    this.ext = '.jpg' //getFileExtension(this.file.filename)
+    this.ext = '.' + (`${fileName}`.split('.')).pop(); //'.jpg' //getFileExtension(this.file.filename)
     // generate newFile name
     this.uniqueFileId = this.createUniqueFileName(this.ext);
     // get file name
-    this.fileName = 'Test.jpg'
+    this.fileName = fileName
     // get file size
-    this.fileSize = 10
+    this.fileSize = fileSize
 
 
-    // model =  new FileSessionModel({
+    // model =  new FileSessionModel(trlpblf[vrl;000000;vlb[ykh;lzdasdsesdxdxcvkgihu{
     //   'file_session_id': sessionId,
     //   'unique_file_name': uniqueFileId,
     //   'original_file_name': filename,
@@ -52,32 +54,37 @@ class FileUploadSessionClass {
   }
 
   async create() {
-    const newSessionInfo = {
-      // 'file_session_id': this.sessionId,
-      original_file_name: this.fileName,
-      unique_file_name: this.uniqueFileId,
-      file_size: this.fileSize,
-      file_extension: this.ext
-    };
 
-    console.log('Info for new session ', newSessionInfo)
-    const newSession = await FileSessionModel.create(newSessionInfo)
+    if (this.fileName?.length > 0 && this.fileSize != null) {
+      const newSessionInfo = {
+        // 'file_session_id': this.sessionId,
+        original_file_name: this.fileName,
+        unique_file_name: this.uniqueFileId,
+        file_size: this.fileSize,
+        file_extension: this.ext
+      };
 
-    console.log(newSession);
+      console.log('Info for new session ', newSessionInfo)
+      const newSession = await FileSessionModel.create(newSessionInfo)
 
-    return newSession //return the session id
+      console.log(newSession);
+
+      return newSession //return the session id
+    }
+
+    return {}
   }
 
-  async findSessionFileInfo( sessionId ){ //string 
+  async findSessionFileInfo(sessionId) { //string 
     // const query = FileSessionModel.findOne(
     //   { _id : sessionId}
     // );
     // query.select('_id unique_file_name file_extension')
     // const fileInfo = await query.exec() ;
-    
+
     const fileInfo = FileSessionModel.findById(sessionId);
 
-    console.log('FIle info', fileInfo) ;
+    console.log('FIle info', fileInfo);
     return fileInfo
   }
 }
