@@ -46,10 +46,10 @@ app.post("/upload", attachmentUpload, (req, res) => {
     }
     const attachmentPath = req.file.path;
     console.log(' File To Be Deleted', attachmentPath);
-    setTimeout(() => {
+    // setTimeout(() => {
 
-      deleteUploadedFile(attachmentPath);
-    }, 3000);
+    //   deleteUploadedFile(attachmentPath);
+    // }, 3000);
   }
   else {
     res.send("No file recieved!")
@@ -78,11 +78,11 @@ app.post('/upload/create_session', multer().none(), async (req, res) => {
         })
 
       else
-        res.send({ success: false, message: ' Failed to Create Session Id', req: req });
+        res.send({ success: false, message: ' Failed to Create Session Id' });
     }
 
     else
-      res.send({ success: false, message: ' Failed to Create Session Id', req: req });
+      res.send({ success: false, message: ' Failed to Create Session Id' });
   }
   catch (e) {
     console.log(' Failed to Create Session Id', e);
@@ -91,25 +91,25 @@ app.post('/upload/create_session', multer().none(), async (req, res) => {
 })
 
 
-app.post('/upload/file_parts',  async (req, res) => {
+app.post('/upload/file_parts',multer().single('filePart'),  async (req, res) => {
   try {
     //extract file chunk & generate a sessionId to return
     const {
       sessionId,
+      uniqueFileName,
       partNumber,
-      filePart,
       isLast
     } = req.body;
-    const file = req.file;
+    const filePart = req.file;
 
     console.log('File Parts Req Body', req.body);
-    console.log('Req file', req.file);
+    // console.log('Req file', req.file);
 
     // const sessionId = '64e95ea6d5f94db498b5d0b4'
-    if (!sessionId) {
+    if (!sessionId || !filePart) {
       return res.send({
         success: false,
-        message: 'Invalid session Id'
+        message: 'Invalid request'
       })
 
     }
@@ -118,23 +118,25 @@ app.post('/upload/file_parts',  async (req, res) => {
       // //get validate sessionId & find file
       const fileInfo = await new FileUploadSessionClass().findSessionFileInfo(sessionId);
 
-      // // write file chunk to localStorage
-      // const f = new FilePartController() ;
-
-      // f.writeFileToStream() ;
 
 
       if (!fileInfo)
         res.send({
           success: false,
-          message: 'Invalid session Id'
+          message: 'session Id not found'
         })
 
-      else
+      else {
+        // // write file chunk to localStorage
+        const f = new FilePartController(filePart, uniqueFileName);
+        await f.writeFileToStream();
         res.send({
           success: true,
           fileInfo: fileInfo
         })
+
+      }
+
     }
 
   }

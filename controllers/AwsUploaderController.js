@@ -1,6 +1,6 @@
 
 let instance
-class FileController {
+class AwsUploaderController {
 
   static getInstance() {
     if (instance === null) {

@@ -17,7 +17,9 @@ class FilePartController{
   async writeFileToStream( ){
 
     return await new Promise( (resolve , reject )=>{
-      console.log(' Writing file chunk', this.file); 
+      // console.log(' Writing file chunk', this.fileChunk);
+      const blobBuffer = this.fileChunk.buffer ;
+      
       const fileStream = fs.createWriteStream(
         `${__dirname}/../Uploads/${this.fileName}`,
         {
@@ -25,7 +27,7 @@ class FilePartController{
         } 
       ) ;
 
-      fileStream.write(this.fileChunk, 'base64') 
+      fileStream.write(blobBuffer ) 
 
       fileStream.on('error', (e)=>{
         console.log('error occured while writing to stream')

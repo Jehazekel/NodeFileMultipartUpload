@@ -76,15 +76,15 @@ class FileUploadSessionClass {
   }
 
   async findSessionFileInfo(sessionId) { //string 
-    // const query = FileSessionModel.findOne(
-    //   { _id : sessionId}
-    // );
-    // query.select('_id unique_file_name file_extension')
-    // const fileInfo = await query.exec() ;
+    const query = FileSessionModel.findOne(
+      { _id : sessionId}
+    );
+    query.select('_id unique_file_name file_extension')
+    const fileInfo = await query.exec() ;
 
-    const fileInfo = FileSessionModel.findById(sessionId);
+    // const fileInfo = FileSessionModel.findById(sessionId);
 
-    console.log('FIle info', fileInfo);
+    // console.log('FIle info', fileInfo);
     return fileInfo
   }
 }
