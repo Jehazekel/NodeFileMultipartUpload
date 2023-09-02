@@ -64,10 +64,10 @@ class FileUploadSessionClass {
         file_extension: this.ext
       };
 
-      console.log('Info for new session ', newSessionInfo)
+      // console.log('Info for new session ', newSessionInfo)
       const newSession = await FileSessionModel.create(newSessionInfo)
 
-      console.log(newSession);
+      console.log('Created Session info', newSession);
 
       return newSession //return the session id
     }
@@ -87,6 +87,10 @@ class FileUploadSessionClass {
     // console.log('FIle info', fileInfo);
     return fileInfo
   }
+
+
+  
+
 }
 
 

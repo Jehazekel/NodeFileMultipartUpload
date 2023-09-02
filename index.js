@@ -91,7 +91,7 @@ app.post('/upload/create_session', multer().none(), async (req, res) => {
 })
 
 
-app.post('/upload/file_parts',multer().single('filePart'),  async (req, res) => {
+app.post('/upload/file_parts', multer().single('filePart'), async (req, res) => {
   try {
     //extract file chunk & generate a sessionId to return
     const {
@@ -102,11 +102,11 @@ app.post('/upload/file_parts',multer().single('filePart'),  async (req, res) => 
     } = req.body;
     const filePart = req.file;
 
-    console.log('File Parts Req Body', req.body);
+    // console.log('File Parts Req Body', req.body);
     // console.log('Req file', req.file);
 
     // const sessionId = '64e95ea6d5f94db498b5d0b4'
-    if (!sessionId || !filePart) {
+    if (!sessionId || !filePart || !uniqueFileName) {
       return res.send({
         success: false,
         message: 'Invalid request'
@@ -128,8 +128,13 @@ app.post('/upload/file_parts',multer().single('filePart'),  async (req, res) => 
 
       else {
         // // write file chunk to localStorage
-        const f = new FilePartController(filePart, uniqueFileName);
-        await f.writeFileToStream();
+        const f = new FilePartController(filePart, uniqueFileName, partNumber);
+        await f.saveFileChunk();
+
+        // if (isLast === 'true') {
+        //   console.log(`executing merge on ${partNumber}`)
+        //   await f.mergeFileParts(partNumber);
+        // }
         res.send({
           success: true,
           fileInfo: fileInfo
@@ -141,11 +146,65 @@ app.post('/upload/file_parts',multer().single('filePart'),  async (req, res) => 
 
   }
   catch (e) {
-    console.log(' Failed to find Session info', e);
-    res.send({ success: false, message: ' Failed to find Session info' });
+    console.log(' Failed to save file part', e);
+    res.send({ success: false, message: ' Failed to save file part' });
   }
 })
 
+
+app.post('/upload/complete', multer().none(), async (req, res) => {
+  try {
+    //extract file chunk & generate a sessionId to return
+    const {
+      sessionId,
+      uniqueFileName,
+      lastPartNumber
+    } = req.body;
+    // const filePart = req.file;
+
+    // console.log('File Parts Req Body', req.body);
+    // console.log('Req file', req.file);
+
+    // const sessionId = '64e95ea6d5f94db498b5d0b4'
+    if (!sessionId || !lastPartNumber || !uniqueFileName) {
+      return res.send({
+        success: false,
+        message: 'Invalid request'
+      })
+
+    }
+
+    else {
+      // //get validate sessionId & find file
+      const fileInfo = await new FileUploadSessionClass().findSessionFileInfo(sessionId);
+
+      if (!fileInfo)
+        res.send({
+          success: false,
+          message: 'session Id not found'
+        })
+
+      else {
+
+        const f = new FilePartController(undefined, uniqueFileName, lastPartNumber);
+        console.log(`executing merge on ${lastPartNumber}`)
+        await f.mergeFileParts(lastPartNumber);
+
+        res.send({
+          success: true,
+          fileInfo: fileInfo
+        })
+
+      }
+
+    }
+
+  }
+  catch (e) {
+    console.log(' Failed to save file part', e);
+    res.send({ success: false, message: ' Failed to save file part' });
+  }
+})
 
 
 app.get('/', (req, res) => {
