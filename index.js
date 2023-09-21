@@ -8,7 +8,7 @@ const { FilePartController } = require('./controllers/FilePartController');
 
 const app = express();
 const multer = require("multer");
-
+require('dotenv').config()
 // app.set('views', path.join(__dirname, 'views'));
 // app.set('view engine', 'html');
 
@@ -212,5 +212,6 @@ app.get('/', (req, res) => {
 })
 app.listen(3000, () => {
 
-  console.log('3001 is running !');
+  console.log('3001 is running !' );
+  // console.log('S3 Bucket -',  process.env.AWS_S3_BUCKET );
 });
