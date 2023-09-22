@@ -158,7 +158,8 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
     const {
       sessionId,
       uniqueFileName,
-      lastPartNumber
+      lastPartNumber ,
+      totalFileSize
     } = req.body;
     // const filePart = req.file;
 
@@ -186,9 +187,13 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
 
       else {
 
-        const f = new FilePartController(undefined, uniqueFileName, lastPartNumber);
+        const f = new FilePartController(undefined, uniqueFileName, lastPartNumber, totalFileSize);
         console.log(`executing merge on ${lastPartNumber}`)
-        await f.mergeFileParts(lastPartNumber);
+        
+        // TO Wait on File Merge Completed
+        // await f.mergeFileParts(lastPartNumber);
+        
+        f.mergeFileParts(lastPartNumber);
 
         res.send({
           success: true,

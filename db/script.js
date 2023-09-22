@@ -1,9 +1,11 @@
 
 const mongoose = require('mongoose');
+require('dotenv').config();
 
 // const mongooseSchema = mongoose.Schema;
 
-mongoose.connect("mongodb://0.0.0.0:27017/Test").then(
+
+mongoose.connect(process.env.MONGO_DB_URL).then(
   () => {
     console.log('COnnected to MongoDb')
   }).catch(

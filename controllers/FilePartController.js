@@ -1,6 +1,7 @@
 
 const fs = require('fs');
-const path = require('path')
+const path = require('path');
+const { AwsUploaderController } = require('./AwsUploaderController');
 
 class FilePartController {
 
@@ -12,11 +13,15 @@ class FilePartController {
   lastPartNumber
   currSegmentNumber = 0
 
-  constructor(filePart, fileName, partNumber) {
+  totalFileSize
+
+  constructor(filePart, fileName, partNumber , totalFileSize) {
     this.fileChunk = filePart
     this.fileName = fileName
     this.partNumber = partNumber
 
+    //used for completing AWS controller
+    this.totalFileSize = totalFileSize
   }
 
 
@@ -105,7 +110,7 @@ class FilePartController {
     const isSuccess = await new Promise((resolve, reject) => {
       console.log(' Reading Chunk ', currPartNumber)
       const onError = () => { console.log('Finished w err\n\n\n'); reject(false) }
-      const onSuccess = () => { console.log('Finished\n\n\n'); resolve(true);}
+      const onSuccess = () => { console.log('Finished\n\n\n'); resolve(true); }
 
       //create read stream
       const segmentsFilePath = this.getSegmentFilePath(currPartNumber);
@@ -153,7 +158,11 @@ class FilePartController {
       return await this.readFileChunks(nextPartNumber)
     }
     else if (nextPartNumber > this.lastPartNumber) {// complete merge
-      this.deleteUploadedChunks();
+      const isDeleted = await this.deleteUploadedChunks();
+      
+      //upload to aws 
+      const awsUploader = new AwsUploaderController(this.fileName, this.totalFileSize , `${path.dirname(__dirname)}\\Uploads\\${this.fileName}`)
+      awsUploader.uploadToAws()
       return true
     }
     else
@@ -162,29 +171,34 @@ class FilePartController {
   }
 
   //To remove file off the server
-  deleteUploadedChunks() {
+  async deleteUploadedChunks() {
 
-    // remove the extension & concat the remaining strings
-    const strArr = this.fileName.split('.')
-    strArr.pop()
-    const folderName = strArr.join('.')
-    const filePath = `${path.dirname(__dirname)}\\Segments\\${folderName}`;
+    return await new Promise((resolve, reject) => {
+      // remove the extension & concat the remaining strings
+      const strArr = this.fileName.split('.')
+      strArr.pop()
+      const folderName = strArr.join('.')
+      const filePath = `${path.dirname(__dirname)}\\Segments\\${folderName}`;
 
-    console.log(`\n\nSegment File Path to be deleted: ${filePath}`)
-    // fs.unlink(filePath, function (err) {
-    //   if (err)
-    //     console.log(err);
-    //   else
-    //     console.log("File Segments Removed from server!")
+      console.log(`\n\nSegment File Path to be deleted: ${filePath}`)
+      // fs.unlink(filePath, function (err) {
+      //   if (err)
+      //     console.log(err);
+      //   else
+      //     console.log("File Segments Removed from server!")
 
-    // })
+      // })
 
-    fs.rm(filePath, { recursive: true, force: true }, err => {
-      if (err) {
-        console.log('Error while deleting segments', err);
-      }
-    
-      console.log(`${filePath} is deleted!`);
+      fs.rm(filePath, { recursive: true, force: true }, err => {
+        if (err) {
+          console.log('Error while deleting segments', err);
+          resolve(false)
+        }
+
+        console.log(`${filePath} is deleted!`);
+        resolve(true);
+      });
+
     });
   }
 
