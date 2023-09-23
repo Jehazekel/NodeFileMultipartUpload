@@ -12,7 +12,7 @@ class AwsUploaderController {
   readFromPath //part of file on server
   fileSize
 
-  MAX_CHUNK_SIZE = 20 * 1024 * 1024  // 100MB
+  MAX_CHUNK_SIZE = (10 * 1024 * 1024)  // 100MB
   totalPartsCount // # of chunks to be uploaded
   currPartNumber = 1
 
@@ -24,6 +24,7 @@ class AwsUploaderController {
   MAX_CONCURRENT_REQUEST = 2
   REQUEST_TIMEOUT = 300000
 
+  fileBuffer
   constructor(fileName, fileSize, filePath) {
     this.bucketParams = {
       Bucket: process.env.AWS_S3_BUCKET,
@@ -36,6 +37,7 @@ class AwsUploaderController {
     this.readFromPath = filePath
 
     this.calculateTotalNumParts();
+
   }
 
   //calculate total # of request required to upload file
@@ -45,45 +47,73 @@ class AwsUploaderController {
   }
 
   async getFilePart(partNumber) {
-    try {
-      const startPos = partNumber === 1 ? 0 : (partNumber - 1) * this.MAX_CHUNK_SIZE //+ 1
-      const end = partNumber * this.MAX_CHUNK_SIZE
-      const endPos = end > this.fileSize ? this.fileSize : end
+    const startPos = partNumber === 1 ? 0 : (partNumber - 1) * this.MAX_CHUNK_SIZE
+    const end = partNumber * this.MAX_CHUNK_SIZE
+    const endPos = end > this.fileSize ? this.fileSize : end
 
-      console.log(`Segment startPos (${startPos}) to end(${endPos})`)
-      // Create Read Stream for file
-      const fileStream = fs.createReadStream(this.readFromPath, { start: Number(startPos), end: Number(endPos) })
 
-      return fileStream
-    }
-    catch (e) {
-      console.log('Error segmenting file', e)
-    }
+    return this.fileBuffer?.buffer.slice(startPos, endPos)
+
+    // return new Promise((resolve, reject) => {
+
+    //   const startPos = partNumber === 1 ? 0 : (partNumber - 1) * this.MAX_CHUNK_SIZE 
+    //   const end = partNumber * this.MAX_CHUNK_SIZE
+    //   const endPos = end > this.fileSize ? this.fileSize : end
+
+    //   console.log(`Segment startPos (${startPos}) to end(${endPos})`)
+    //   // Create Read Stream for file
+    //   const fileStream =  fs.createReadStream(this.readFromPath, { start: Number(startPos), end: Number(endPos) })
+
+    //   let fileData
+    //   fileStream.on('data', (data) => {
+    //     if (!fileData)
+    //       fileData = data
+    //     else
+    //       fileData += data
+    //   })
+    //   fileStream.on('end', () => {
+    //     resolve(fileData)
+    //     fileStream.close()
+    //   })
+
+    //   fileStream.on('error', (e) => {
+    //     console.log('Error segmenting file', e)
+    //     resolve()
+    //     fileStream.close()
+    //   })
+
+    // })
   }
 
   async uploadToAws() {
 
     // initiate MultiPartUpload
     try {
-      console.log('Starting Multi Part Initiation')
-      const resp = await this.s3Client.createMultipartUpload(this.bucketParams)
+      console.log('Reading File..')
+      this.fileBuffer = await fs.promises.readFile(this.readFromPath)
+      console.log('Finish Reading File..\n\n')
+
+      console.log('Starting Multi Part Initiation', new Date().toLocaleTimeString())
+      const resp = await this.s3Client.createMultipartUpload(this.bucketParams, { requestTimeout: this.REQUEST_TIMEOUT })
       console.log(`Completed Multi Part Initiation ${resp.UploadId} \n\n`)
 
       // set upload Id
       this.uploadId = resp.UploadId
 
-      // const initialUploads = this.totalPartsCount < 10 ? this.totalPartsCount : 10
-      // for (let i = 1; i <= initialUploads; i++) {
-      //   this.uploadPart(this.currPartNumber)
-      //   this.currPartNumber += 1
-      // }
+      const initialUploads = this.totalPartsCount < 10 ? this.totalPartsCount : 10
+      for (let i = 1; i <= initialUploads; i++) {
+        this.uploadPart(this.currPartNumber)
+        this.currPartNumber += 1
+      }
 
-      this.uploadNextPart()
+      // this.uploadNextPart()
 
     }
     catch (e) {
-      console.log('MultiPart Upload Initiation Error', e)
+      console.log(new Date().toLocaleTimeString(), 'MultiPart Upload Initiation Error', e)
 
+      await this.abortFileUpload()
+      this.deleteFile()
     }
 
   }
@@ -99,11 +129,12 @@ class AwsUploaderController {
   async uploadPart(partNumber) {
 
     try {
-      this.pendingRequest += 1
-
       const currFilePart = await this.getFilePart(partNumber)
       if (!currFilePart)
         return
+      // console.log(`CHunk #${partNumber}`, currFilePart)
+      this.pendingRequest += 1
+
 
       //create Upload Part Parameters
       const uploadPartParams = {
@@ -116,15 +147,17 @@ class AwsUploaderController {
         Body: currFilePart,
         UploadId: this.uploadId,
         PartNumber: partNumber,
+        ContentLength: currFilePart?.byteLength //Buffer.byteLength(currFilePart)
       }
 
-      console.log(`Part #${partNumber} uploading`)
+      console.log(`Part #${partNumber} uploading`, new Date().toLocaleTimeString())
 
       const resp = await this.s3Client.uploadPart(uploadPartParams, { requestTimeout: this.REQUEST_TIMEOUT })
-      
-      console.log(`Part #${partNumber} uploaded successfully : ${resp?.ETag} \n\n`)
-      this.uploadedParts.push({ ETag: resp?.ETag, PartNumber: uploadPartParams?.PartNumber })
 
+      if (resp?.ETag) {
+        console.log(`Part #${partNumber} uploaded successfully : ${resp?.ETag} \n\n`)
+        this.uploadedParts.push({ ETag: resp?.ETag, PartNumber: uploadPartParams?.PartNumber })
+      }
       // Update Pending Request
       this.pendingRequest -= 1
 
@@ -136,12 +169,10 @@ class AwsUploaderController {
 
     }
     catch (e) {
-      console.log('Upload Part Error', e)
+      console.log(new Date().toLocaleTimeString(), 'Upload Part Error', e)
       await this.abortFileUpload()
       this.deleteFile()
     }
-    // finally {
-    // }
 
   }
 
@@ -150,7 +181,7 @@ class AwsUploaderController {
     try {
       //sort uploadedParts Arr
       const sortedParts = this.uploadedParts.sort((a, b) => a.PartNumber - b.PartNumber);
-
+      console.log('Sorted Parts', sortedParts)
       const completeParams = {
         // Bucket: 'STRING_VALUE', /* required */
         // Key: 'STRING_VALUE', /* required */
@@ -172,9 +203,9 @@ class AwsUploaderController {
     }
     catch (e) {
       console.log('Complete Aws multipart upload Error', e)
+      await this.abortFileUpload()
     }
     finally {
-      await this.abortFileUpload()
       this.deleteFile()
     }
 
