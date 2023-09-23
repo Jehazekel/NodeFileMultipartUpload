@@ -12,7 +12,7 @@ class AwsUploaderController {
   readFromPath //part of file on server
   fileSize
 
-  MAX_CHUNK_SIZE = (10 * 1024 * 1024)  // 100MB
+  MAX_CHUNK_SIZE = ( process.env?.MAX_CHUNK_SIZE_IN_MB ?? 100 ) * 1024 * 1024  // 100MB
   totalPartsCount // # of chunks to be uploaded
   currPartNumber = 1
 
@@ -21,7 +21,7 @@ class AwsUploaderController {
 
   // Manging 
   pendingRequest = 0
-  MAX_CONCURRENT_REQUEST = 2
+  MAX_CONCURRENT_REQUEST = process.env?.MAX_CONCURRENT_REQUEST ?? 10
   REQUEST_TIMEOUT = 300000
 
   fileBuffer
@@ -100,7 +100,7 @@ class AwsUploaderController {
       // set upload Id
       this.uploadId = resp.UploadId
 
-      const initialUploads = this.totalPartsCount < 10 ? this.totalPartsCount : 10
+      const initialUploads = Math.min( this.MAX_CONCURRENT_REQUEST, this.totalPartsCount ) 
       for (let i = 1; i <= initialUploads; i++) {
         this.uploadPart(this.currPartNumber)
         this.currPartNumber += 1
