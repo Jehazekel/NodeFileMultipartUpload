@@ -13,15 +13,12 @@ class FilePartController {
   lastPartNumber
   currSegmentNumber = 0
 
-  totalFileSize
 
-  constructor(filePart, fileName, partNumber , totalFileSize) {
+  constructor(filePart, fileName, partNumber ) {
     this.fileChunk = filePart
     this.fileName = fileName
     this.partNumber = partNumber
 
-    //used for completing AWS controller
-    this.totalFileSize = totalFileSize
   }
 
 
@@ -161,7 +158,7 @@ class FilePartController {
       const isDeleted = await this.deleteUploadedChunks();
       
       //upload to aws 
-      const awsUploader = new AwsUploaderController(this.fileName, this.totalFileSize , `${path.dirname(__dirname)}\\Uploads\\${this.fileName}`)
+      const awsUploader = new AwsUploaderController(this.fileName, `${path.dirname(__dirname)}\\Uploads\\${this.fileName}`)
       awsUploader.uploadToAws()
       return true
     }

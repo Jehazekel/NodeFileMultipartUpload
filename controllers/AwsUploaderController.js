@@ -12,7 +12,7 @@ class AwsUploaderController {
   readFromPath //part of file on server
   fileSize
 
-  MAX_CHUNK_SIZE = ( process.env?.MAX_CHUNK_SIZE_IN_MB ?? 100 ) * 1024 * 1024  // 100MB
+  MAX_CHUNK_SIZE = (process.env?.MAX_CHUNK_SIZE_IN_MB ?? 5) * 1024 * 1024  // 100MB
   totalPartsCount // # of chunks to be uploaded
   currPartNumber = 1
 
@@ -25,7 +25,7 @@ class AwsUploaderController {
   REQUEST_TIMEOUT = 300000
 
   fileBuffer
-  constructor(fileName, fileSize, filePath) {
+  constructor(fileName, filePath) {
     this.bucketParams = {
       Bucket: process.env.AWS_S3_BUCKET,
       Key: fileName
@@ -33,8 +33,8 @@ class AwsUploaderController {
 
     // import s3 client
     this.s3Client = AwsS3Client
-    this.fileSize = fileSize
     this.readFromPath = filePath
+    this.fileSize = fs.statSync(this.readFromPath)?.size
 
     this.calculateTotalNumParts();
 
@@ -42,56 +42,57 @@ class AwsUploaderController {
 
   //calculate total # of request required to upload file
   calculateTotalNumParts() {
-    this.totalPartsCount = Math.ceil(this.fileSize / this.MAX_CHUNK_SIZE);
+    let totalCount = Math.ceil(this.fileSize / this.MAX_CHUNK_SIZE)
+    while (totalCount > 1000) {
+      this.MAX_CHUNK_SIZE = this.MAX_CHUNK_SIZE * 2
+      totalCount = Math.ceil(this.fileSize / this.MAX_CHUNK_SIZE)
+    }
+    this.totalPartsCount = totalCount
     console.log('Total Part to be uploaded', this.totalPartsCount)
   }
 
+
+  readBytes(fd, sharedBuffer, startPos) {
+    return new Promise((resolve, reject) => {
+      fs.read(
+        fd,
+        sharedBuffer,
+        0,
+        sharedBuffer.length,
+        startPos,
+        (err, bytesRead, data) => {
+          console.log('Bytes Read', bytesRead)
+          if (err) { return reject(err); }
+          resolve(data);
+        }
+      );
+    });
+  }
+
   async getFilePart(partNumber) {
+    // METHOD 1
+    const stats = fs.statSync(this.readFromPath); // file details
+    const fd = fs.openSync(this.readFromPath); // file descriptor
+
     const startPos = partNumber === 1 ? 0 : (partNumber - 1) * this.MAX_CHUNK_SIZE
-    const end = partNumber * this.MAX_CHUNK_SIZE
-    const endPos = end > this.fileSize ? this.fileSize : end
+    const bufferSize = partNumber * this.MAX_CHUNK_SIZE > stats?.size
+      ? stats?.size - startPos
+      : this.MAX_CHUNK_SIZE
+    this.fileBuffer = Buffer.alloc(bufferSize);
+    console.log(`Part #${partNumber} : Start Pos ${startPos} ... end Pos ${startPos + bufferSize}`)
+    // console.log('File Stat', stats?.size)
 
 
-    return this.fileBuffer?.buffer.slice(startPos, endPos)
+    return await this.readBytes(fd, this.fileBuffer, startPos)
 
-    // return new Promise((resolve, reject) => {
+    // return this.fileBuffer
 
-    //   const startPos = partNumber === 1 ? 0 : (partNumber - 1) * this.MAX_CHUNK_SIZE 
-    //   const end = partNumber * this.MAX_CHUNK_SIZE
-    //   const endPos = end > this.fileSize ? this.fileSize : end
-
-    //   console.log(`Segment startPos (${startPos}) to end(${endPos})`)
-    //   // Create Read Stream for file
-    //   const fileStream =  fs.createReadStream(this.readFromPath, { start: Number(startPos), end: Number(endPos) })
-
-    //   let fileData
-    //   fileStream.on('data', (data) => {
-    //     if (!fileData)
-    //       fileData = data
-    //     else
-    //       fileData += data
-    //   })
-    //   fileStream.on('end', () => {
-    //     resolve(fileData)
-    //     fileStream.close()
-    //   })
-
-    //   fileStream.on('error', (e) => {
-    //     console.log('Error segmenting file', e)
-    //     resolve()
-    //     fileStream.close()
-    //   })
-
-    // })
   }
 
   async uploadToAws() {
 
     // initiate MultiPartUpload
     try {
-      console.log('Reading File..')
-      this.fileBuffer = await fs.promises.readFile(this.readFromPath)
-      console.log('Finish Reading File..\n\n')
 
       console.log('Starting Multi Part Initiation', new Date().toLocaleTimeString())
       const resp = await this.s3Client.createMultipartUpload(this.bucketParams, { requestTimeout: this.REQUEST_TIMEOUT })
@@ -100,7 +101,7 @@ class AwsUploaderController {
       // set upload Id
       this.uploadId = resp.UploadId
 
-      const initialUploads = Math.min( this.MAX_CONCURRENT_REQUEST, this.totalPartsCount ) 
+      const initialUploads = Math.min(this.MAX_CONCURRENT_REQUEST, this.totalPartsCount)
       for (let i = 1; i <= initialUploads; i++) {
         this.uploadPart(this.currPartNumber)
         this.currPartNumber += 1
@@ -129,12 +130,7 @@ class AwsUploaderController {
   async uploadPart(partNumber) {
 
     try {
-      const currFilePart = await this.getFilePart(partNumber)
-      if (!currFilePart)
-        return
-      // console.log(`CHunk #${partNumber}`, currFilePart)
       this.pendingRequest += 1
-
 
       //create Upload Part Parameters
       const uploadPartParams = {
@@ -144,10 +140,10 @@ class AwsUploaderController {
         // UploadId: 'STRING_VALUE', /* required */
         Key: this.bucketParams.Key,
         Bucket: this.bucketParams.Bucket,
-        Body: currFilePart,
+        Body: await this.getFilePart(partNumber),
         UploadId: this.uploadId,
         PartNumber: partNumber,
-        ContentLength: currFilePart?.byteLength //Buffer.byteLength(currFilePart)
+
       }
 
       console.log(`Part #${partNumber} uploading`, new Date().toLocaleTimeString())

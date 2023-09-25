@@ -187,7 +187,7 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
 
       else {
 
-        const f = new FilePartController(undefined, uniqueFileName, lastPartNumber, totalFileSize);
+        const f = new FilePartController(undefined, uniqueFileName, lastPartNumber);
         console.log(`executing merge on ${lastPartNumber}`)
         
         // TO Wait on File Merge Completed
