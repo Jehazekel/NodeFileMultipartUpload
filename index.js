@@ -8,6 +8,7 @@ const { FilePartController } = require('./controllers/FilePartController');
 
 const app = express();
 const multer = require("multer");
+const { AwsUploaderController } = require('./controllers/AwsUploaderController');
 require('dotenv').config()
 // app.set('views', path.join(__dirname, 'views'));
 // app.set('view engine', 'html');
@@ -33,26 +34,48 @@ app.get("/upload", (req, res) => {
 
 
 app.post("/upload", attachmentUpload, (req, res) => {
-  console.log(req?.params)
+  console.log(req?.file)
   if (req.file) {
 
     try {
       // uploadImageToStorage(req.file).then(results => {
       //   res.send(results)
       // });
-      res.send("File recieved!")
+
+      const awsUploader = new AwsUploaderController(req.file.filename, req.file.path)
+      awsUploader.uploadToAws()
+
+      const attachmentPath = req.file.path;
+      // console.log(' File To Be Deleted', attachmentPath);
+
+
+      res.send({
+        success: true,
+        fileInfo: { uniqueFileName: req.file.filename },
+        message : 'Uploaded Successfully'
+      })
+
+
     } catch (e) {
-      res.send(`{"error": "${e}"}`)
+      console.log(e)
+      res.send({
+        success: false,
+        message: 'An error occured. Unable to save file'
+      })
+      // res.send(`{"error": "${e}"}`)
+
+
     }
-    const attachmentPath = req.file.path;
-    console.log(' File To Be Deleted', attachmentPath);
     // setTimeout(() => {
 
     //   deleteUploadedFile(attachmentPath);
     // }, 3000);
   }
   else {
-    res.send("No file recieved!")
+    res.send({
+      success: false,
+      message: 'No file recieved'
+    })
   }
 
 })
@@ -158,7 +181,7 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
     const {
       sessionId,
       uniqueFileName,
-      lastPartNumber ,
+      lastPartNumber,
       totalFileSize
     } = req.body;
     // const filePart = req.file;
@@ -189,10 +212,10 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
 
         const f = new FilePartController(undefined, uniqueFileName, lastPartNumber);
         console.log(`executing merge on ${lastPartNumber}`)
-        
+
         // TO Wait on File Merge Completed
         // await f.mergeFileParts(lastPartNumber);
-        
+
         f.mergeFileParts(lastPartNumber);
 
         res.send({
@@ -217,6 +240,6 @@ app.get('/', (req, res) => {
 })
 app.listen(3000, () => {
 
-  console.log('3001 is running !' );
+  console.log('3001 is running !');
   // console.log('S3 Bucket -',  process.env.AWS_S3_BUCKET );
 });

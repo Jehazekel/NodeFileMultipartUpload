@@ -12,43 +12,51 @@
 
 const fs = require("fs");
 const path = require('path');  //import the module path
-const rootDirectory = path.dirname(require.main.filename ); //returns the directory name of the file that is running aka "app.js" parent folder
+const rootDirectory = path.dirname(require.main.filename); //returns the directory name of the file that is running aka "app.js" parent folder
 const multer = require("multer"); //for handleing Multipart forms ONLY
+
+const uuidv4 = require('uuid').v4;
+
+function createUniqueFileName(fileExtension) {
+    const timeStamp = new Date().toISOString().replace(/[-:.TZ]/g, "")
+    return `${uuidv4()}_${timeStamp}${fileExtension}`
+}
+
 
 //Setting Up local storage for file
 
 //Set a storage engien to store recieved files locally
 const localStorage = multer.diskStorage({
-    destination: function(req, file, callback){
+    destination: function (req, file, callback) {
         //call back( error, destination)
-        if ( file )
-        callback(null, path.join(rootDirectory, 'Uploads'));  //store in firebase folder
+        if (file)
+            callback(null, path.join(rootDirectory, 'Uploads'));  //store in firebase folder
     },
-    filename: function (req, file, callback){
+    filename: function (req, file, callback) {
         //callback( error, fileName)
-        
-        if ( file ){
-          const newFileName = `${Date.now()}${path.extname(file.originalname)}` ;
-          console.log( 'New File Name', newFileName)
-          
-          // callback(null, `${file.originalname}`);
-          callback(null, newFileName);
+
+        if (file) {
+            const newFileName = createUniqueFileName(path.extname(file.originalname))//`${Date.now()}${path.extname(file.originalname)}`;
+            console.log('New File Name', newFileName)
+
+            // callback(null, `${file.originalname}`);
+            callback(null, newFileName);
         }
-        
+
         //callback(null, `${req.body.name.toLowerCase().replace(" ","_")}.${file.originalname.split('.')[1]}`);
     }
 });
 
 const attachmentUpload = multer({
-    storage:localStorage,
+    storage: localStorage,
 }).single("file")  //name of multipart form field to process 
 
 //To remove file off the server
-function deleteUploadedFile(attachmentPath){
-    let filePath =  attachmentPath
+function deleteUploadedFile(attachmentPath) {
+    let filePath = attachmentPath
     console.log(`\n\nFile Path to be deleted: ${filePath}`)
-    fs.unlink( filePath, function(err){
-        if(err)
+    fs.unlink(filePath, function (err) {
+        if (err)
             console.log(err);
         else
             console.log("File Removed from server!")
@@ -60,4 +68,4 @@ function deleteUploadedFile(attachmentPath){
 
 
 
-module.exports = { attachmentUpload, deleteUploadedFile};
+module.exports = { attachmentUpload, deleteUploadedFile };

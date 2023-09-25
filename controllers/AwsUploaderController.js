@@ -1,4 +1,5 @@
 require('dotenv').config()
+const { PutObjectCommand } = require('@aws-sdk/client-s3');
 const AwsS3Client = require('../config/AwsS3Client')
 const fs = require("fs");
 const path = require('path');
@@ -25,6 +26,7 @@ class AwsUploaderController {
   REQUEST_TIMEOUT = 300000
 
   fileBuffer
+  useSingleUpload = false
   constructor(fileName, filePath) {
     this.bucketParams = {
       Bucket: process.env.AWS_S3_BUCKET,
@@ -36,9 +38,12 @@ class AwsUploaderController {
     this.readFromPath = filePath
     this.fileSize = fs.statSync(this.readFromPath)?.size
 
-    this.calculateTotalNumParts();
-
+    if (this.fileSize > 5 * 1024 * 1024)
+      this.calculateTotalNumParts();
+    else
+      this.useSingleUpload = true
   }
+
 
   //calculate total # of request required to upload file
   calculateTotalNumParts() {
@@ -93,6 +98,11 @@ class AwsUploaderController {
 
     // initiate MultiPartUpload
     try {
+
+      if( this.useSingleUpload ){
+        await this.singleUpload()
+        return
+      }
 
       console.log('Starting Multi Part Initiation', new Date().toLocaleTimeString())
       const resp = await this.s3Client.createMultipartUpload(this.bucketParams, { requestTimeout: this.REQUEST_TIMEOUT })
@@ -221,6 +231,44 @@ class AwsUploaderController {
     }
     catch (e) {
       console.log('File Upload Abortion error : ', e)
+    }
+  }
+
+
+  async singleUpload() {
+    try {
+      console.log('Initating Single File Upload...',new Date().toLocaleTimeString() )
+      //create Upload Part Parameters
+      const uploadPartParams = {
+        // Bucket: 'STRING_VALUE', /* required */
+        // Key: 'STRING_VALUE', /* required */
+        // PartNumber: 'NUMBER_VALUE', /* required */
+        // UploadId: 'STRING_VALUE', /* required */
+        Key: this.bucketParams.Key,
+        Bucket: this.bucketParams.Bucket,
+        Body: await this.getFilePart(1),
+
+      }
+
+      console.log(`Uploading`, new Date().toLocaleTimeString())
+
+      const resp = await this.s3Client.send(
+        new PutObjectCommand(uploadPartParams),
+        { requestTimeout: this.REQUEST_TIMEOUT }
+      )
+
+
+      if (resp?.ETag) {
+        console.log(`${this.bucketParams.Key} uploaded Succesfully`)
+      }
+
+    }
+    catch (e) {
+      console.log('Aws Sinlge file upload Error', e)
+      await this.abortFileUpload()
+    }
+    finally {
+      this.deleteFile()
     }
   }
 
