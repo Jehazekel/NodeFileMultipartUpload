@@ -99,13 +99,13 @@ class AwsUploaderController {
     // initiate MultiPartUpload
     try {
 
-      if( this.useSingleUpload ){
+      if (this.useSingleUpload) {
         await this.singleUpload()
         return
       }
 
       console.log('Starting Multi Part Initiation', new Date().toLocaleTimeString())
-      const resp = await this.s3Client.createMultipartUpload(this.bucketParams, { requestTimeout: this.REQUEST_TIMEOUT })
+      const resp = await this.s3Client.createMultipartUpload({ ...this.bucketParams, ACL: 'public-read' }, { requestTimeout: this.REQUEST_TIMEOUT })
       console.log(`Completed Multi Part Initiation ${resp.UploadId} \n\n`)
 
       // set upload Id
@@ -204,6 +204,8 @@ class AwsUploaderController {
 
       if (resp?.ETag) {
         console.log(`${this.bucketParams.Key} uploaded Succesfully`)
+        console.log('Multi Resp', resp?.Location)
+
       }
 
     }
@@ -237,7 +239,7 @@ class AwsUploaderController {
 
   async singleUpload() {
     try {
-      console.log('Initating Single File Upload...',new Date().toLocaleTimeString() )
+      console.log('Initating Single File Upload...', new Date().toLocaleTimeString())
       //create Upload Part Parameters
       const uploadPartParams = {
         // Bucket: 'STRING_VALUE', /* required */
@@ -247,9 +249,9 @@ class AwsUploaderController {
         Key: this.bucketParams.Key,
         Bucket: this.bucketParams.Bucket,
         Body: await this.getFilePart(1),
-
+        ACL: 'public-read'
       }
-
+      console.log(' Params', uploadPartParams)
       console.log(`Uploading`, new Date().toLocaleTimeString())
 
       const resp = await this.s3Client.send(
@@ -258,10 +260,12 @@ class AwsUploaderController {
       )
 
 
+      
       if (resp?.ETag) {
         console.log(`${this.bucketParams.Key} uploaded Succesfully`)
+        // console.log('Single response:', resp)
+        console.log('Aws File Location:', `https://${this.bucketParams?.Bucket ?? process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${this.bucketParams?.Key}`)
       }
-
     }
     catch (e) {
       console.log('Aws Sinlge file upload Error', e)
