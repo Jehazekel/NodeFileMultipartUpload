@@ -1,46 +1,11 @@
 
-const express = require('express');
-const cors = require("cors")
-const path = require('path');  //import the module path
-const { attachmentUpload, deleteUploadedFile } = require('./fileUpload');
-const { FileUploadSessionClass } = require('./db/model/FileUploadSessionClass');
-const { FilePartController } = require('./controllers/FilePartController');
-const { FileDetailsClass } = require('./db/model/FileDetailsClass');
-const { ThumbnailRouter } = require('./routes/ThumbnailRoutes');
-const { VideoRouter } = require('./routes/VideoRoutes');
+const { AwsUploaderController } = require('../controllers/AwsUploaderController');
+const { FilePartController } = require('../controllers/FilePartController');
+const { FileUploadSessionClass } = require('../db/model/FileUploadSessionClass');
+const { FileDetailsClass } = require('../db/model/FileDetailsClass');
 
-const app = express();
-const multer = require("multer");
-const { AwsUploaderController } = require('./controllers/AwsUploaderController');
-require('dotenv').config()
-// app.set('views', path.join(__dirname, 'views'));
-// app.set('view engine', 'html');
-
-
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-
-// Model 
-// const FileUploadSession = require('./db/schemas/FileUploadSession');
-
-app.use('/thumbnail', ThumbnailRouter);
-app.use('/video', VideoRouter);
-
-app.get("/upload", (req, res) => {
-  res.header('Content-Type', 'text/html').send(`
-  <h1> Upload </h1>
-
-    <form method="POST" action="/upload" enctype="multipart/form-data">
-      <input name="file" type="file" />
-      <input type="submit" />
-    </form>
-  `);
-})
-
-
-app.post("/upload", attachmentUpload, (req, res) => {
-  console.log(req?.file)
+async function UploadSmallFile(req, res) {
+  console.log('Enter /upload/:videoId route')
   if (req.file) {
 
     try {
@@ -48,17 +13,32 @@ app.post("/upload", attachmentUpload, (req, res) => {
       //   res.send(results)
       // });
 
-      const awsUploader = new AwsUploaderController(req.file.filename, req.file.path)
+      //url params
+      const {
+        videoId
+      } = req.params;
+
+      const {
+        fileSize
+      } = req.body;
+
+      console.log('Req Params :', req?.params)
+      console.log('FileSize', fileSize)
+      console.log('File', req?.file)
+
+      const uniqueFileId = req?.file?.filename// await generateRandomFileName(req.file.filename);
+
+      const awsUploader = new AwsUploaderController(uniqueFileId, req.file.path)
       awsUploader.uploadToAws()
 
-      const attachmentPath = req.file.path;
+      // const attachmentPath = req.file.path;
       // console.log(' File To Be Deleted', attachmentPath);
 
 
       res.send({
         success: true,
         fileInfo: { uniqueFileName: req.file.filename },
-        message : 'Uploaded Successfully'
+        message: 'Uploaded Successfully'
       })
 
 
@@ -72,10 +52,7 @@ app.post("/upload", attachmentUpload, (req, res) => {
 
 
     }
-    // setTimeout(() => {
 
-    //   deleteUploadedFile(attachmentPath);
-    // }, 3000);
   }
   else {
     res.send({
@@ -83,22 +60,33 @@ app.post("/upload", attachmentUpload, (req, res) => {
       message: 'No file recieved'
     })
   }
+}// END OF UPLOAD SMALL fILE FN
 
-})
 
-
-app.post('/upload/create_session', multer().none(), async (req, res) => {
+async function UploadFilePartCreateSession(req, res) {
   try {
     const {
       fileName,
-      fileSize
+      fileSize,
+      FILE_TYPE
     } = req.body;
+
+    //url params
+    const {
+      videoId
+    } = req.params;
 
     console.log(req.body)
 
     if (fileName != null && fileSize != null) {
       //accept file & generate a sessionId to return
       const { _id, unique_file_name } = await new FileUploadSessionClass(fileName, Number(fileSize)).create();
+
+      
+      // Create file record
+      const fileDetails = new FileDetailsClass(videoId, unique_file_name, FILE_TYPE)
+      const saveFileDetails = await fileDetails.create()
+      console.log('saved file Details', saveFileDetails)
 
       if (_id != null && unique_file_name != null)
         res.send({
@@ -117,10 +105,10 @@ app.post('/upload/create_session', multer().none(), async (req, res) => {
     console.log(' Failed to Create Session Id', e);
     res.send({ success: false, message: ' Failed to Create Session Id' });
   }
-})
+}
 
 
-app.post('/upload/file_parts', multer().single('filePart'), async (req, res) => {
+async function UploadFilePart(req, res) {
   try {
     //extract file chunk & generate a sessionId to return
     const {
@@ -178,10 +166,9 @@ app.post('/upload/file_parts', multer().single('filePart'), async (req, res) => 
     console.log(' Failed to save file part', e);
     res.send({ success: false, message: ' Failed to save file part' });
   }
-})
+}
 
-
-app.post('/upload/complete', multer().none(), async (req, res) => {
+async function CompleteUploadFilePart(req, res) {
   try {
     //extract file chunk & generate a sessionId to return
     const {
@@ -190,12 +177,7 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
       lastPartNumber,
       totalFileSize
     } = req.body;
-    // const filePart = req.file;
 
-    // console.log('File Parts Req Body', req.body);
-    // console.log('Req file', req.file);
-
-    // const sessionId = '64e95ea6d5f94db498b5d0b4'
     if (!sessionId || !lastPartNumber || !uniqueFileName) {
       return res.send({
         success: false,
@@ -238,14 +220,12 @@ app.post('/upload/complete', multer().none(), async (req, res) => {
     console.log(' Failed to save file part', e);
     res.send({ success: false, message: ' Failed to save file part' });
   }
-})
+}
 
 
-app.get('/', (req, res) => {
-  res.send('Server is running !')
-})
-app.listen(3000, () => {
-
-  console.log('3001 is running !');
-  // console.log('S3 Bucket -',  process.env.AWS_S3_BUCKET );
-});
+module.exports = { 
+  UploadSmallFile,
+  UploadFilePartCreateSession,
+  UploadFilePart,
+  CompleteUploadFilePart
+}

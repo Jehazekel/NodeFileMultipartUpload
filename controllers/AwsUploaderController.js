@@ -4,6 +4,7 @@ const AwsS3Client = require('../config/AwsS3Client')
 const fs = require("fs");
 const path = require('path');
 // import s3 client 
+const { FileDetailsClass } = require('../db/model/FileDetailsClass');
 
 
 class AwsUploaderController {
@@ -68,6 +69,7 @@ class AwsUploaderController {
         (err, bytesRead, data) => {
           console.log('Bytes Read', bytesRead)
           if (err) { return reject(err); }
+          fs.close(fd);
           resolve(data);
         }
       );
@@ -86,8 +88,8 @@ class AwsUploaderController {
     this.fileBuffer = Buffer.alloc(bufferSize);
     console.log(`Part #${partNumber} : Start Pos ${startPos} ... end Pos ${startPos + bufferSize}`)
     // console.log('File Stat', stats?.size)
-
-
+    
+    
     return await this.readBytes(fd, this.fileBuffer, startPos)
 
     // return this.fileBuffer
@@ -204,8 +206,10 @@ class AwsUploaderController {
 
       if (resp?.ETag) {
         console.log(`${this.bucketParams.Key} uploaded Succesfully`)
-        console.log('Multi Resp', resp?.Location)
-
+        console.log('\n\n\nMulti Resp', resp?.Location)
+        
+        const fileDetails = await new FileDetailsClass().setFileToSuccessfulUpload( this.bucketParams.Key, resp?.Location)
+        console.log(`Successful Upload : ${fileDetails?.uploadIsSuccess}\n Entity Type: ${fileDetails?.entity_type}`)
       }
 
     }
@@ -264,12 +268,16 @@ class AwsUploaderController {
       if (resp?.ETag) {
         console.log(`${this.bucketParams.Key} uploaded Succesfully`)
         // console.log('Single response:', resp)
-        console.log('Aws File Location:', `https://${this.bucketParams?.Bucket ?? process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${this.bucketParams?.Key}`)
+        const newAwsUrl =  `https://${this.bucketParams?.Bucket ?? process.env.AWS_S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${this.bucketParams?.Key}`
+        console.log('\n\n\nAws File Location:', newAwsUrl)
+        
+        const fileDetails = await new FileDetailsClass().setFileToSuccessfulUpload( this.bucketParams.Key, newAwsUrl)
+        console.log(`Successful Upload : ${fileDetails?.uploadIsSuccess}\n Entity Type: ${fileDetails?.entity_type}`)
       }
     }
     catch (e) {
       console.log('Aws Sinlge file upload Error', e)
-      await this.abortFileUpload()
+      // await this.abortFileUpload()
     }
     finally {
       this.deleteFile()
@@ -277,9 +285,10 @@ class AwsUploaderController {
   }
 
   deleteFile() {
-    const filePath = `${path.dirname(__dirname)}\\Uploads\\${this.bucketParams.Key}`
-    console.log(`From AWS Controller\n\n File Path to be deleted: ${filePath}`)
-    fs.unlink(filePath, function (err) {
+    // const filePath = `${path.dirname(__dirname)}\\Uploads\\${this.bucketParams.Key}`
+    // console.log(`From AWS Controller\n\n File Path to be deleted: ${filePath}`)
+    console.log(`From AWS Controller\n\n File Path to be deleted: ${this.readFromPath}`)
+    fs.unlink(this.readFromPath, function (err) {
       if (err)
         console.log(err);
       else
